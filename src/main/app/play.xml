@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+    <http:request-config name="HTTP_Request_Configuration" host="localhost" port="8090" doc:name="HTTP Request Configuration"/>
+    <flow name="playFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"/>
+        <choice doc:name="Choice">
+            <when expression="#[message.inboundProperties.'http.query.params'.name != null]">
+                <set-variable variableName="name" value="#[message.inboundProperties.'http.query.params'.name]" doc:name="Set Name Variable"/>
+            </when>
+            <otherwise>
+                <set-variable variableName="name" value="World" doc:name="Set Name Variable to 'World'"/>
+            </otherwise>
+        </choice>
+        <logger message="I've made my choice - flowVars.name = #[flowVars.name]" level="INFO" doc:name="Logger"/>
+        <set-payload value="Hello #[flowVars.name]!" doc:name="Return Hello"/>
+        <logger message="Returning - #[message.payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+    <flow name="movieFromHostFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/movies/{id}" allowedMethods="GET,PUT,DELETE" doc:name="HTTP"/>
+        <set-variable variableName="id" value="#[message.inboundProperties.'http.request.uri'.substring(8)]" doc:name="Set id Variable"/>
+        <set-variable variableName="method" value="#[message.inboundProperties.'http.method']" doc:name="Set method Variable"/>
+        <logger message="id = #[flowVars.id] and method = #[flowVars.method]" level="INFO" doc:name="Logger"/>
+        <logger message="Evaluating :::   #[flowVars.method=='GET']" level="INFO" doc:name="Logger"/>
+        <choice doc:name="Choose Method">
+            <when expression="#[flowVars.method=='GET']">
+                <http:request config-ref="HTTP_Request_Configuration" path="/movies/#[flowVars.id]" method="GET" doc:name="Get Movie From Host"/>
+                <logger message="Getting" level="INFO" doc:name="Logger"/>
+            </when>
+            <when expression="#[flowVars.method=='PUT']">
+                <http:request config-ref="HTTP_Request_Configuration" path="/movies/#[flowVars.id]" method="PUT" doc:name="Update Movie on Host">
+                    <http:request-builder>
+                        <http:header headerName="Content-Type" value="application/json"/>
+                    </http:request-builder>
+                </http:request>
+                <logger message="Putting" level="INFO" doc:name="Logger"/>
+            </when>
+            <otherwise>
+                <set-payload value="Method Not Allowed" doc:name="Return Error Message"/>
+                <set-property propertyName="http.status" value="405" doc:name="Property"/>
+                <logger message="ERROR" level="INFO" doc:name="Logger"/>
+            </otherwise>
+        </choice>
+        <logger message="Returning #[message.payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+    <flow name="moviesFromHostFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/movies" allowedMethods="GET" doc:name="HTTP"/>
+        <http:request config-ref="HTTP_Request_Configuration" path="/movies" method="GET" doc:name="Call to Host"/>
+    </flow>
+</mule>
